@@ -36,6 +36,9 @@ async function initApp() {
     document.getElementById('loginType').value = 'adm';
     onTypeChange();
   });
+  document.getElementById('cedula').addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g, '');
+  });
 
   // === EVENTOS POSTULANTE ===
   document.getElementById('btnCerrar').addEventListener('click', cerrarSesion);
@@ -83,10 +86,12 @@ async function initApp() {
   });
 
   // Logout Admin
-  document.getElementById('btnLogoutAdmin').addEventListener('click', function() {
-    if (confirm('¿Deseas cerrar la sesión de administrador?')) {
+  document.getElementById('btnLogoutAdmin').addEventListener('click', async function() {
+    if (await showConfirm('¿Deseas cerrar la sesión de administrador?', 'Cerrar sesión', 'question')) {
+      await supabase.auth.signOut();
       show('pgLogin');
       goSection('navDash');
+      limpiarLogin();
     }
   });
 
@@ -124,6 +129,22 @@ async function initApp() {
 
   // Botón nueva conv en barra de Convocatorias
   document.getElementById('btnNuevaConv2').addEventListener('click', abrirModal);
+
+  // === EVENTOS MODALES NUEVOS ===
+  document.getElementById('btnCloseEstado').addEventListener('click', cerrarModalEstado);
+  document.getElementById('btnCancelarEstado').addEventListener('click', cerrarModalEstado);
+  document.getElementById('btnGuardarEstado').addEventListener('click', guardarEstadoPendiente);
+  document.getElementById('btnCloseDet').addEventListener('click', cerrarDetalle);
+
+  // === EVENTOS COLLAPSIBLE SIDEBAR ===
+  var togglePostBtn = document.getElementById('btnTogglePost');
+  if (togglePostBtn) {
+    togglePostBtn.addEventListener('click', toggleSidebar);
+  }
+  var toggleAdminBtn = document.getElementById('btnToggleAdmin');
+  if (toggleAdminBtn) {
+    toggleAdminBtn.addEventListener('click', toggleSidebar);
+  }
 }
 
 // ===== TIEMPO =====
@@ -245,7 +266,15 @@ async function renderVacantesPost() {
 var currentFilter = 'todos';
 var currentSearch = '';
 
+function limpiarLogin() {
+  ['cedula', 'admUser', 'admPass'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
 function onTypeChange() {
+  limpiarLogin();
   var t = document.getElementById('loginType').value;
   document.getElementById('postAccess').classList.toggle('hidden', t !== 'post');
   document.getElementById('admAccess').classList.toggle('hidden', t !== 'adm');
@@ -263,8 +292,9 @@ async function doLogin() {
   var t = document.getElementById('loginType').value;
   if (t === 'post') {
     var ced = document.getElementById('cedula').value.trim();
-    if (!ced) { alert('Ingrese su número de cédula.'); return; }
+    if (!ced) { showToast('Ingrese su número de cédula.', 'warning'); return; }
     show('pgPost');
+    limpiarLogin();
     document.getElementById('cedDisplay').textContent = ced;
     document.getElementById('fDoc').value = ced;
     
@@ -301,40 +331,71 @@ async function doLogin() {
     var p = document.getElementById('admPass').value.trim();
     
     try {
-      let { data, error } = await supabase
+      var emailToAuth = u;
+      if (!u.includes('@')) {
+        // Buscar el correo a partir del nombre de usuario
+        let { data: usrData, error: usrErr } = await supabase
+          .from('usuarios')
+          .select('correo')
+          .eq('usuario', u)
+          .limit(1);
+        
+        if (usrErr) throw usrErr;
+        
+        if (usrData && usrData.length > 0) {
+          emailToAuth = usrData[0].correo;
+        } else {
+          showToast('Usuario, contraseña incorrectos o cuenta inactiva.', 'error');
+          return;
+        }
+      }
+      
+      // Autenticar con Supabase Auth
+      let { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: emailToAuth,
+        password: p
+      });
+      
+      if (authErr) {
+        showToast('Usuario, contraseña incorrectos o cuenta inactiva.', 'error');
+        return;
+      }
+      
+      // Verificar perfil en tabla usuarios (y su estado)
+      let { data: profileData, error: profileErr } = await supabase
         .from('usuarios')
         .select('*')
-        .eq('usuario', u)
-        .eq('password', p)
+        .eq('id', authData.user.id)
         .eq('estado', 'Activo')
         .limit(1);
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        show('pgAdmin');
         
-        // Actualizar último acceso del administrador
-        await supabase
-          .from('usuarios')
-          .update({ ultimo_acceso: new Date().toLocaleString('es-CO') })
-          .eq('usuario', u);
-          
-        await renderCandidatos();
-        await renderConvocatorias();
-      } else {
-        alert('Usuario, contraseña incorrectos o cuenta inactiva.');
+      if (profileErr || !profileData || profileData.length === 0) {
+        await supabase.auth.signOut();
+        showToast('Usuario, contraseña incorrectos o cuenta inactiva.', 'error');
+        return;
       }
+      
+      show('pgAdmin');
+      limpiarLogin();
+      
+      // Actualizar último acceso del administrador
+      await supabase
+        .from('usuarios')
+        .update({ ultimo_acceso: new Date().toLocaleString('es-CO') })
+        .eq('id', authData.user.id);
+          
+      await renderCandidatos();
+      await renderConvocatorias();
     } catch (err) {
       console.error('Error de login admin:', err);
-      alert('Error de conexión al autenticar.');
+      showToast('Error de conexión al autenticar.', 'error');
     }
   }
 }
 
 function cerrarSesion() {
   show('pgLogin');
-  document.getElementById('cedula').value = '';
+  limpiarLogin();
 }
 
 function show(id) {
@@ -557,27 +618,46 @@ async function renderUsuarios() {
   tb.innerHTML = data.map(function(u, i) {
     var cls = u.estado==='Activo' ? 'green' : 'gray';
     return '<tr>'
-      + '<td><b>' + u.usuario + '</b></td>'
+      + '<td><b>' + u.usuario + '</b><br><span style="font-size:11px;color:#5a7068">✉️ ' + (u.correo||'—') + '</span></td>'
       + '<td>' + u.nombre + '</td>'
       + '<td><span class="badge blue nocursor">' + u.rol + '</span></td>'
       + '<td style="font-size:12px;color:#5a7068">' + (u.ultimo_acceso||'—') + '</td>'
       + '<td><span class="badge ' + cls + ' nocursor">' + u.estado + '</span></td>'
-      + '<td>' + (u.usuario !== 'admin' ? '<button class="actbtn del" data-delusr="' + u.usuario + '">🗑</button>' : '<span style="font-size:11px;color:#aaa">Sistema</span>') + '</td>'
+      + '<td>' + (u.usuario !== 'admin' 
+        ? '<button class="actbtn sec" data-toggleusr="' + u.usuario + '">' + (u.estado === 'Activo' ? '⏸ Desact.' : '▶ Activar') + '</button> <button class="actbtn del" data-delusr="' + u.usuario + '">🗑</button>' 
+        : '<span style="font-size:11px;color:#aaa">Sistema</span>') + '</td>'
       + '</tr>';
   }).join('');
   
   tb.querySelectorAll('[data-delusr]').forEach(function(btn) {
     btn.addEventListener('click', async function() {
-      if (confirm('¿Eliminar este usuario?')) {
+      if (await showConfirm('¿Eliminar este usuario?', 'Eliminar usuario', 'danger')) {
         var user = this.getAttribute('data-delusr');
         try {
-          let { error } = await supabase.from('usuarios').delete().eq('usuario', user);
+          let { error } = await supabase.rpc('eliminar_usuario_admin', { user_name: user });
           if (error) throw error;
           showToast('👤 Usuario eliminado');
           await renderUsuarios();
         } catch (err) {
-          alert('No se pudo eliminar el usuario.');
+          showToast('No se pudo eliminar el usuario.', 'error');
         }
+      }
+    });
+  });
+
+  tb.querySelectorAll('[data-toggleusr]').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var user = this.getAttribute('data-toggleusr');
+      var currentUsr = data.find(u => u.usuario === user);
+      if (!currentUsr) return;
+      var nextEst = currentUsr.estado === 'Activo' ? 'Inactivo' : 'Activo';
+      try {
+        let { error } = await supabase.from('usuarios').update({ estado: nextEst }).eq('usuario', user);
+        if (error) throw error;
+        showToast('👤 Estado de usuario actualizado');
+        await renderUsuarios();
+      } catch (err) {
+        showToast('No se pudo cambiar el estado del usuario.', 'error');
       }
     });
   });
@@ -586,23 +666,33 @@ async function renderUsuarios() {
 async function guardarUsuario() {
   var u = document.getElementById('uUser').value.trim();
   var n = document.getElementById('uNombre').value.trim();
+  var email = document.getElementById('uEmail').value.trim();
   var p = document.getElementById('uPass').value.trim();
   var r = document.getElementById('uRol').value;
-  if (!u||!n||!p){alert('Complete todos los campos.');return;}
+  if (!u||!n||!p||!email){showToast('Complete todos los campos.', 'warning');return;}
+  
+  if (!email.toLowerCase().endsWith('@ises.com.co')) {
+    showToast('El correo electrónico debe pertenecer al dominio corporativo @ises.com.co', 'warning');
+    return;
+  }
   
   try {
-    let { error } = await supabase
-      .from('usuarios')
-      .insert([{ usuario: u, nombre: n, password: p, rol: r, estado: 'Activo', ultimo_acceso: '—' }]);
+    let { error } = await supabase.rpc('crear_usuario_admin', {
+      email_val: email,
+      pass_val: p,
+      user_name: u,
+      full_name: n,
+      user_rol: r
+    });
     
     if (error) throw error;
     
-    ['uUser','uNombre','uPass'].forEach(function(id){document.getElementById(id).value='';});
+    ['uUser','uNombre','uEmail','uPass'].forEach(function(id){document.getElementById(id).value='';});
     document.getElementById('formNuevoUsr').classList.add('hidden');
     await renderUsuarios();
     showToast('👤 Usuario creado correctamente');
   } catch (err) {
-    alert('Error al registrar usuario (puede que el nombre de usuario ya exista).');
+    showToast('Error al registrar usuario (puede que el nombre de usuario ya exista o el correo ya esté registrado).', 'error');
   }
 }
 
@@ -666,7 +756,7 @@ function openDropdown(wrap, arr, current, onSelect) {
 // ===== DESCARGA DE ARCHIVOS DESDE SUPABASE STORAGE =====
 function descargarPDF(pdfUrl) {
   if (!pdfUrl) {
-    alert('El archivo no está disponible.');
+    showToast('El archivo no está disponible.', 'warning');
     return;
   }
   // Abre el PDF en una pestaña nueva para lectura o descarga
@@ -681,7 +771,7 @@ async function enviarPostulacion() {
     return;
   }
   if (!document.getElementById('fDatos').checked) {
-    alert('Debe aceptar la autorización de tratamiento de datos.');
+    showToast('Debe aceptar la autorización de tratamiento de datos.', 'warning');
     return;
   }
   
@@ -689,8 +779,27 @@ async function enviarPostulacion() {
   var doc = document.getElementById('fDoc').value.trim();
   var email = document.getElementById('fEmail').value.trim();
   if (!nom || !doc || !email) {
-    alert('Complete los campos obligatorios: nombre, documento y correo electrónico.');
+    showToast('Complete los campos obligatorios: nombre, documento y correo electrónico.', 'warning');
     return;
+  }
+
+  // Validar si el candidato ya se postuló a esta misma convocatoria
+  try {
+    let { data: duplicados, error: dupError } = await supabase
+      .from('postulaciones')
+      .select('estado')
+      .eq('documento', doc)
+      .eq('convocatoria_id', vacSeleccionada)
+      .limit(1);
+    
+    if (dupError) throw dupError;
+    
+    if (duplicados && duplicados.length > 0) {
+      showToast('Ya te has postulado a esta vacante. Estado actual: ' + duplicados[0].estado, 'warning');
+      return;
+    }
+  } catch (err) {
+    console.error('Error al validar postulación duplicada:', err);
   }
 
   var f = document.getElementById('fPDF').files[0];
@@ -721,7 +830,7 @@ async function enviarPostulacion() {
       pdfUrl = data.publicUrl;
     } catch (err) {
       console.error('Error al subir PDF:', err);
-      alert('Error al guardar el archivo PDF. Intenta enviarlo nuevamente.');
+      showToast('Error al guardar el archivo PDF. Intenta enviarlo nuevamente.', 'error');
       return;
     }
   }
@@ -765,20 +874,35 @@ async function enviarPostulacion() {
     setTimeout(function() { ban.classList.add('hidden'); }, 6000);
   } catch (err) {
     console.error('Error al insertar postulante:', err);
-    alert('Error de red. Intenta enviar el formulario de nuevo.');
+    showToast('Error de red. Intenta enviar el formulario de nuevo.', 'error');
   }
 }
 
 function limpiarForm() {
-  ['fNombre','fDoc','fCiudad','fTel','fEmail','fProf','fExp','fAjustes'].forEach(function(id) {
+  ['fNombre','fDoc','fCiudad','fTel','fEmail','fProf','fExp','fAjustes','fConvId','fConvNombre'].forEach(function(id) {
     var el = document.getElementById(id); 
     if (el) el.value = '';
   });
-  document.getElementById('fDatos').checked = false;
-  document.getElementById('fPDF').value = '';
+  
+  // Reset selects to first option
+  ['fPerfil', 'fArea', 'fCert'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.selectedIndex = 0;
+  });
+
+  // Reset checkbox and file inputs
+  var dat = document.getElementById('fDatos');
+  if (dat) dat.checked = false;
+  
+  var pdf = document.getElementById('fPDF');
+  if (pdf) pdf.value = '';
+  
+  var sop = document.getElementById('fSop');
+  if (sop) sop.value = '';
 }
 
-async function cambiarEstadoCand(id, nuevoEstado) {
+async function cambiarEstadoCand(id, nuevoEstado, obs) {
+  var obsStr = obs || '';
   try {
     // Buscar postulante actual para obtener su historial
     let { data: curr, error: fetchErr } = await supabase
@@ -790,7 +914,13 @@ async function cambiarEstadoCand(id, nuevoEstado) {
     if (fetchErr) throw fetchErr;
     
     var history = curr[0].history || [];
-    history.push({ estado: curr[0].estado, fecha: new Date().toLocaleString('es-CO') });
+    history.push({
+      estadoAnterior: curr[0].estado,
+      estado: nuevoEstado,
+      fecha: new Date().toLocaleString('es-CO'),
+      observacion: obsStr,
+      usuario: 'Administrador'
+    });
 
     let { error } = await supabase
       .from('postulaciones')
@@ -811,7 +941,7 @@ async function cambiarEstadoCand(id, nuevoEstado) {
 }
 
 async function eliminarCand(id) {
-  if (confirm('¿Eliminar este registro permanentemente?')) {
+  if (await showConfirm('¿Eliminar este registro permanentemente?', 'Eliminar candidato', 'danger')) {
     try {
       // Eliminar el archivo de Supabase Storage primero
       let { data: cand } = await supabase.from('postulaciones').select('pdf_url').eq('id', id).limit(1);
@@ -828,6 +958,7 @@ async function eliminarCand(id) {
       await renderCandidatos();
     } catch (err) {
       console.error('Error al eliminar candidato:', err);
+      showToast('No se pudo eliminar el candidato.', 'error');
     }
   }
 }
@@ -900,21 +1031,23 @@ async function renderCandidatos() {
     var tlId = 'tl-' + c.id;
     var fStr = c.created_at ? new Date(c.created_at).toLocaleDateString('es-CO') : '—';
     var uStr = c.updated_at ? new Date(c.updated_at).toLocaleDateString('es-CO') : null;
+    var nc = NCLS[c.perfil] || 'gray';
     
     rows += '<tr id="' + mainId + '">';
-    rows += '<td><b>' + c.nombre + '</b><br><span style="font-size:11px;color:#5a7068">' + c.correo + '</span></td>';
-    rows += '<td>' + c.documento + '</td>';
-    rows += '<td>' + c.perfil + '</td>';
-    rows += '<td>' + (c.area || '—') + (c.convocatoria_nombre ? '<br><span style="font-size:10px;color:var(--azul);font-weight:600">📢 ' + c.convocatoria_nombre + '</span>' : '') + '</td>';
+    rows += '<td><div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;border-radius:50%;background:var(--grad);color:#fff;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + ini(c.nombre) + '</div><div><b style="font-size:13px">' + c.nombre + '</b><br><span style="font-size:11px;color:#5a7068">' + c.correo + '</span></div></div></td>';
+    rows += '<td><b>' + c.documento + '</b>' + (c.ciudad ? '<br><span style="font-size:11px;color:#5a7068">📍 ' + c.ciudad + '</span>' : '') + '</td>';
+    rows += '<td><span class="badge ' + nc + ' nocursor">' + c.perfil + '</span>' + (c.profesion ? '<br><span style="font-size:11px;color:#5a7068">' + c.profesion + '</span>' : '') + '</td>';
+    rows += '<td><b style="font-size:12px">' + (c.convocatoria_nombre || '—') + '</b><br><span style="font-size:11px;color:#5a7068">' + c.area + '</span></td>';
+    rows += '<td style="font-size:12px">' + (c.ciudad || '—') + '</td>';
     rows += '<td style="text-align:center">' + (c.certificado === 'Sí' ? '✅' : '—') + '</td>';
     rows += '<td>' + (c.tiene_pdf && c.pdf_url
       ? '<button class="actbtn sec pdf-dl" data-url="' + c.pdf_url + '" title="Descargar ' + (c.pdf || 'PDF') + '" style="display:flex;align-items:center;gap:4px;font-size:11px;padding:5px 10px">📄 Descargar ⬇</button>'
       : '<span style="font-size:11px;color:#aaa">Sin archivo</span>') + '</td>';
     rows += '<td><div class="bw" data-id="' + c.id + '" data-type="cand"><span class="badge ' + e.c + '">' + e.i + ' ' + c.estado + '</span></div>' + (uStr ? '<div style="font-size:10px;color:#aaa;margin-top:2px">' + uStr + '</div>' : '') + '</td>';
     rows += '<td><button class="actbtn sec" data-tl="' + c.id + '">🔄 Ruta</button></td>';
-    rows += '<td><button class="actbtn del" data-del="' + c.id + '">🗑</button></td>';
+    rows += '<td><button class="actbtn sec" data-ver="' + c.id + '">👁 Ver</button><button class="actbtn del" data-del="' + c.id + '">🗑</button></td>';
     rows += '</tr>';
-    rows += '<tr class="tlrow" id="' + tlId + '" style="display:none"><td colspan="9">' + buildTL(c) + '</td></tr>';
+    rows += '<tr class="tlrow" id="' + tlId + '" style="display:none"><td colspan="10">' + buildTL(c) + '</td></tr>';
   });
   
   tb.innerHTML = rows;
@@ -924,9 +1057,9 @@ async function renderCandidatos() {
     wrap.addEventListener('click', function(e) {
       e.stopPropagation();
       var id = parseInt(this.getAttribute('data-id'));
-      openDropdown(this, EPOST, eInfo(EPOST, filtered.find(c => c.id === id).estado).k, async function(nuevoEstado) {
-        await cambiarEstadoCand(id, nuevoEstado);
-      });
+      var cand = filtered.find(c => c.id === id);
+      if (!cand) return;
+      abrirModalEstado(id, cand.estado);
     });
   });
   
@@ -935,6 +1068,13 @@ async function renderCandidatos() {
       var id = this.getAttribute('data-tl');
       var row = document.getElementById('tl-' + id);
       if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+    });
+  });
+  
+  tb.querySelectorAll('[data-ver]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = parseInt(this.getAttribute('data-ver'));
+      abrirDetalle(id);
     });
   });
   
@@ -998,7 +1138,7 @@ async function guardarConv(estado) {
   var mod = document.getElementById('cvMod').value;
   var vac = document.getElementById('cvVac').value;
   var cierre = document.getElementById('cvCierre').value;
-  if (!cargo || !nivel || !mod || !vac || !cierre) { alert('Complete todos los campos obligatorios (*).'); return; }
+  if (!cargo || !nivel || !mod || !vac || !cierre) { showToast('Complete todos los campos obligatorios (*).', 'warning'); return; }
   
   var conv = {
     id: Date.now(), 
@@ -1022,7 +1162,7 @@ async function guardarConv(estado) {
     if (estado === 'Publicada') showToast('🚀 Convocatoria publicada exitosamente');
   } catch (err) {
     console.error('Error al guardar convocatoria:', err);
-    alert('Error al registrar convocatoria.');
+    showToast('Error al registrar convocatoria.', 'error');
   }
 }
 
@@ -1044,7 +1184,7 @@ async function cambiarEstadoConv(id, nuevoEstado) {
 }
 
 async function eliminarConv(id) {
-  if (confirm('¿Eliminar esta convocatoria?')) {
+  if (await showConfirm('¿Eliminar esta convocatoria?', 'Eliminar convocatoria', 'danger')) {
     try {
       let { error } = await supabase.from('convocatorias').delete().eq('id', id);
       if (error) throw error;
@@ -1052,6 +1192,7 @@ async function eliminarConv(id) {
       await renderConvocatorias();
     } catch (err) {
       console.error('Error al eliminar convocatoria:', err);
+      showToast('No se pudo eliminar la convocatoria.', 'error');
     }
   }
 }
@@ -1125,10 +1266,286 @@ function bindConvRows(container, list) {
   });
 }
 
-function showToast(msg) {
+function showToast(msg, type = 'success') {
   var t = document.getElementById('toast');
   if (!t) return;
-  t.textContent = msg; 
-  t.style.display = 'block';
-  setTimeout(function() { t.style.display = 'none'; }, 3500);
+  t.className = 'toast show ' + type;
+  
+  var icon = '✅';
+  if (type === 'error') icon = '❌';
+  else if (type === 'warning') icon = '⚠️';
+  else if (type === 'info') icon = 'ℹ️';
+  
+  t.innerHTML = '<span class="toast-icon">' + icon + '</span><span class="toast-msg">' + msg + '</span>';
+  
+  if (t.timeoutId) clearTimeout(t.timeoutId);
+  t.timeoutId = setTimeout(function() {
+    t.classList.remove('show');
+  }, 3500);
 }
+
+function showConfirm(message, title = 'Confirmar acción', type = 'warning') {
+  return new Promise((resolve) => {
+    var modal = document.getElementById('modalConfirm');
+    var titleEl = document.getElementById('confirmTitle');
+    var msgEl = document.getElementById('confirmMessage');
+    var iconEl = document.getElementById('confirmIcon');
+    var btnOk = document.getElementById('btnConfirmOk');
+    var btnCancel = document.getElementById('btnConfirmCancel');
+    
+    if (!modal) return resolve(false);
+    
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    
+    var icon = '❓';
+    var okColor = 'var(--grad)';
+    if (type === 'danger') {
+      icon = '⚠️';
+      okColor = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    } else if (type === 'question') {
+      icon = '❓';
+      okColor = 'var(--grad)';
+    } else if (type === 'info') {
+      icon = 'ℹ️';
+      okColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+    }
+    
+    iconEl.textContent = icon;
+    btnOk.style.background = okColor;
+    btnOk.textContent = 'Confirmar';
+    btnCancel.style.display = 'block';
+    
+    modal.classList.add('show');
+    
+    var cleanup = function(value) {
+      modal.classList.remove('show');
+      btnOk.removeEventListener('click', onOk);
+      btnCancel.removeEventListener('click', onCancel);
+      resolve(value);
+    };
+    
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    
+    btnOk.addEventListener('click', onOk);
+    btnCancel.addEventListener('click', onCancel);
+  });
+}
+
+function showAlert(message, title = 'Atención', type = 'warning') {
+  return new Promise((resolve) => {
+    var modal = document.getElementById('modalConfirm');
+    var titleEl = document.getElementById('confirmTitle');
+    var msgEl = document.getElementById('confirmMessage');
+    var iconEl = document.getElementById('confirmIcon');
+    var btnOk = document.getElementById('btnConfirmOk');
+    var btnCancel = document.getElementById('btnConfirmCancel');
+    
+    if (!modal) return resolve();
+    
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    
+    var icon = '⚠️';
+    var okColor = 'var(--grad)';
+    if (type === 'error') {
+      icon = '❌';
+      okColor = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    } else if (type === 'success') {
+      icon = '✅';
+      okColor = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+    } else if (type === 'info') {
+      icon = 'ℹ️';
+      okColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+    }
+    
+    iconEl.textContent = icon;
+    btnOk.style.background = okColor;
+    btnOk.textContent = 'Aceptar';
+    btnCancel.style.display = 'none';
+    
+    modal.classList.add('show');
+    
+    var cleanup = function() {
+      modal.classList.remove('show');
+      btnOk.removeEventListener('click', onOk);
+      btnCancel.style.display = 'block';
+      resolve();
+    };
+    
+    function onOk() { cleanup(); }
+    
+    btnOk.addEventListener('click', onOk);
+  });
+}
+
+// === LÓGICA DE ESTADOS CON OBSERVACIÓN ===
+var _estadoPendId = null;
+var _estadoPendNs = null;
+
+function abrirModalEstado(id, estadoActual) {
+  _estadoPendId = id;
+  _estadoPendNs = estadoActual;
+  document.getElementById('obsTexto').value = '';
+  
+  var optCont = document.getElementById('estadoOpciones');
+  if (optCont) {
+    optCont.innerHTML = EPOST.map(function(est) {
+      var activo = est.k === estadoActual;
+      return '<div class="estado-opt' + (activo ? ' active' : '') + '" data-est="' + est.k + '">'
+        + '<div class="eo-dot" style="background:' + (DOT_COLORS[est.c] || '#999') + '"></div>'
+        + est.i + ' ' + est.k
+        + '</div>';
+    }).join('');
+    
+    optCont.querySelectorAll('.estado-opt').forEach(function(opt) {
+      opt.addEventListener('click', function() {
+        optCont.querySelectorAll('.estado-opt').forEach(function(o) { o.classList.remove('active'); });
+        this.classList.add('active');
+        _estadoPendNs = this.getAttribute('data-est');
+      });
+    });
+  }
+  
+  document.getElementById('modalEstado').classList.add('show');
+}
+
+function cerrarModalEstado() {
+  document.getElementById('modalEstado').classList.remove('show');
+  _estadoPendId = null;
+  _estadoPendNs = null;
+}
+
+async function guardarEstadoPendiente() {
+  if (!_estadoPendId || !_estadoPendNs) return;
+  var obs = document.getElementById('obsTexto').value.trim();
+  await cambiarEstadoCand(_estadoPendId, _estadoPendNs, obs);
+  cerrarModalEstado();
+  
+  var detModal = document.getElementById('modalDet');
+  if (detModal && detModal.classList.contains('show')) {
+    abrirDetalle(_estadoPendId);
+  }
+}
+
+// === LÓGICA DE DETALLE DEL CANDIDATO ===
+function ini(nombre) {
+  return (nombre || '?').split(' ').slice(0, 2).map(function(w) { return w[0] || ''; }).join('').toUpperCase();
+}
+
+async function abrirDetalle(id) {
+  try {
+    let { data: currList, error } = await supabase
+      .from('postulaciones')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+    if (error || !currList || currList.length === 0) {
+      showToast('No se pudo cargar la información del candidato.', 'error');
+      return;
+    }
+    var c = currList[0];
+    var e = eInfo(EPOST, c.estado);
+    var nc = NCLS[c.perfil] || 'gray';
+    var hist = c.history && c.history.length ? c.history.map(function(h) {
+      var eH = eInfo(EPOST, h.estado || h.estadoAnterior || 'Pendiente');
+      return '<li>'
+        + '<div class="hl-row" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">'
+          + '<div class="hl-badge">'
+            + (h.estadoAnterior ? '<span class="badge ' + eInfo(EPOST, h.estadoAnterior).c + ' nocursor" style="font-size:10px;">' + eInfo(EPOST, h.estadoAnterior).i + ' ' + h.estadoAnterior + '</span>'
+              + '<span style="font-size:12px;margin:0 5px;color:#aaa">→</span>'
+              + '<span class="badge ' + eInfo(EPOST, h.estado).c + ' nocursor" style="font-size:10px;">' + eInfo(EPOST, h.estado).i + ' ' + h.estado + '</span>'
+             : '<span class="badge ' + eH.c + ' nocursor" style="font-size:10px;">' + eH.i + ' ' + eH.k + '</span>')
+          + '</div>'
+          + '<div style="text-align:right;">'
+            + '<div class="hl-fecha" style="font-size:10px;color:#aaa;">📅 ' + h.fecha + '</div>'
+            + (h.usuario ? '<div class="hl-fecha" style="font-size:10px;color:#aaa;">👤 ' + h.usuario + '</div>' : '')
+          + '</div>'
+        + '</div>'
+        + (h.observacion ? '<div class="hl-obs" style="font-size:11.5px;color:#2a4060;background:#f0f6ff;border-left:3px solid var(--azul);padding:5px 10px;border-radius:0 6px 6px 0;margin-top:6px;font-style:italic;">💬 ' + h.observacion + '</div>' : '')
+      + '</li>';
+    }).join('') : '<li style="text-align:center;color:#aaa;padding:12px;font-size:13px;">Sin historial de cambios aún</li>';
+
+    document.getElementById('detContenido').innerHTML =
+      '<div class="dth" style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid var(--borde);">'
+      + '<div class="dtava" style="width:56px;height:56px;border-radius:50%;background:var(--grad);color:#fff;font-family:\'Nunito\',sans-serif;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + ini(c.nombre) + '</div>'
+      + '<div>'
+        + '<div class="dttit" style="font-family:\'Nunito\',sans-serif;font-size:20px;font-weight:800;color:var(--azul-dark);margin-bottom:3px;">' + c.nombre + '</div>'
+        + '<div class="dtsub" style="font-size:13px;color:#5a7068;">' + c.correo + (c.telefono ? ' &nbsp;·&nbsp; 📞 ' + c.telefono : '') + '</div>'
+        + '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"><span class="badge ' + e.c + ' nocursor">' + e.i + ' ' + c.estado + '</span>' + (c.tiene_pdf ? '<span class="badge blue nocursor">📄 ' + c.pdf + '</span>' : '<span class="badge gray nocursor">Sin PDF</span>') + '</div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="dtsec" style="font-family:\'Nunito\',sans-serif;font-size:13px;font-weight:800;color:var(--azul-dark);margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--azul-l);">📋 Información Personal</div>'
+      + '<div class="dtg" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Tipo / Nº Documento</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + c.documento + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Ciudad de residencia</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + (c.ciudad || '—') + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Correo electrónico</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + c.correo + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Teléfono</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + (c.telefono || '—') + '</span></div>'
+      + '</div>'
+      + '<div class="dtsec" style="font-family:\'Nunito\',sans-serif;font-size:13px;font-weight:800;color:var(--azul-dark);margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--azul-l);">💼 Información Profesional</div>'
+      + '<div class="dtg" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Nivel de formación</label><span class="badge ' + nc + ' nocursor" style="display:inline-flex;">' + c.perfil + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Profesión / Carrera</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + (c.profesion || '—') + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Área de interés</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + c.area + '</span></div>'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Convocatoria aplicada</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + (c.convocatoria_nombre || '—') + '</span></div>'
+      + '</div>'
+      + (c.experiencia ? '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;margin-bottom:14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Experiencia laboral</label><span style="white-space:pre-wrap;display:block;margin-top:4px;font-size:13px;color:var(--texto);">' + c.experiencia + '</span></div>' : '')
+      + '<div class="dtsec" style="font-family:\'Nunito\',sans-serif;font-size:13px;font-weight:800;color:var(--azul-dark);margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--azul-l);">♿ Inclusión Laboral</div>'
+      + '<div class="dtg" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+        + '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Certificado de discapacidad</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + (c.certificado === 'Sí' ? '✅ Sí, tiene certificado' : 'No aplica') + '</span></div>'
+        + (c.ajustes ? '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Ajustes requeridos</label><span style="font-size:13px;font-weight:600;color:var(--texto);display:block;">' + c.ajustes + '</span></div>' : '<div class="dtf" style="background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;padding:11px 14px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#5a7068;display:block;margin-bottom:3px;">Ajustes requeridos</label><span style="color:#aaa;font-size:13px;display:block;">Ninguno</span></div>')
+      + '</div>'
+      + '<div class="dtsec" style="font-family:\'Nunito\',sans-serif;font-size:13px;font-weight:800;color:var(--azul-dark);margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--azul-l);">📎 Documentos</div>'
+      + '<div style="display:flex;align-items:center;gap:12px;padding:14px;background:#f8fbfa;border:1px solid var(--borde);border-radius:10px;margin-bottom:14px;">'
+        + (c.tiene_pdf && c.pdf_url ? '<span style="font-size:26px;">📄</span><div style="flex:1;"><div style="font-size:13px;font-weight:600;">' + c.pdf + '</div><div style="font-size:11px;color:#5a7068;">Hoja de vida adjunta</div></div><button class="actbtn sec pdf-dl-modal" data-url="' + c.pdf_url + '" style="padding:8px 18px;font-size:12px;cursor:pointer;">Descargar PDF ⬇</button>' : '<span style="font-size:26px;">📭</span><div style="font-size:13px;color:#aaa;">No se adjuntó archivo PDF</div>')
+      + '</div>'
+      + '<div class="dtsec" style="font-family:\'Nunito\',sans-serif;font-size:13px;font-weight:800;color:var(--azul-dark);margin:14px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--azul-l);">🕓 Historial de estados</div>'
+      + '<div class="dthl" style="background:#f8fbfe;border:1px solid var(--borde);border-radius:10px;padding:12px;"><ul style="list-style:none;padding:0;margin:0;">' + hist + '</ul></div>'
+      + '<div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--borde);">'
+        + '<button class="sbtn" id="btnAbrirEstado" data-cid="' + c.id + '" data-cest="' + c.estado + '" style="flex:1;padding:12px;cursor:pointer;">🔄 Cambiar estado + Observación</button>'
+        + '<button class="actbtn del" id="btnEliminarDet" data-cid="' + c.id + '" style="padding:12px 18px;font-size:13px;cursor:pointer;">Eliminar 🗑</button>'
+      + '</div>';
+
+    document.getElementById('modalDet').classList.add('show');
+
+    // Binds de eventos en el modal
+    var btnDlModal = document.querySelector('.pdf-dl-modal');
+    if (btnDlModal) {
+      btnDlModal.addEventListener('click', function() {
+        descargarPDF(this.getAttribute('data-url'));
+      });
+    }
+
+    document.getElementById('btnAbrirEstado').addEventListener('click', function() {
+      var cid = parseInt(this.getAttribute('data-cid'));
+      var cest = this.getAttribute('data-cest');
+      cerrarDetalle();
+      abrirModalEstado(cid, cest);
+    });
+
+    document.getElementById('btnEliminarDet').addEventListener('click', async function() {
+      var cid = parseInt(this.getAttribute('data-cid'));
+      cerrarDetalle();
+      await eliminarCand(cid);
+    });
+  } catch (err) {
+    console.error('Error al abrir detalle:', err);
+    showToast('Error de conexión.', 'error');
+  }
+}
+
+function cerrarDetalle() {
+  document.getElementById('modalDet').classList.remove('show');
+}
+
+function toggleSidebar() {
+  document.body.classList.toggle('sb-collapsed');
+  var isCollapsed = document.body.classList.contains('sb-collapsed');
+  var icon = isCollapsed ? '›' : '‹';
+  var btnP = document.getElementById('btnTogglePost');
+  var btnA = document.getElementById('btnToggleAdmin');
+  if (btnP) btnP.textContent = icon;
+  if (btnA) btnA.textContent = icon;
+}
+
