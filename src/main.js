@@ -5,13 +5,19 @@ import './style.css';
 var LOGO = 'data:image/jpeg;base64,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';
 
 // ===== INICIALIZACIÓN DE FECHAS Y TICKER =====
-window.onload = function() {
+function runInit() {
   ['logoLogin','logoPost','logoAdmin'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.src = LOGO;
   });
   initApp();
-};
+}
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  runInit();
+} else {
+  window.addEventListener('DOMContentLoaded', runInit);
+}
 
 async function initApp() {
   // Configurar Fecha local
@@ -25,85 +31,6 @@ async function initApp() {
   
   setInterval(tickTime, 30000);
   tickTime();
-
-  // Render inicial de convocatorias en el formulario del postulante
-  await renderVacantesPost();
-
-  // === RESTAURACIÓN DE SESIÓN (PERSISTENCIA AL RECARGAR) ===
-  try {
-    // 1. Verificar si hay sesión de Administrador activa en Supabase Auth
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      // Obtener el perfil del usuario activo
-      let { data: profileData, error: profileErr } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('id', session.user.id)
-        .eq('estado', 'Activo')
-        .limit(1);
-
-      if (!profileErr && profileData && profileData.length > 0) {
-        var adminUsr = profileData[0];
-        show('pgAdmin');
-        
-        // Cargar datos del administrador en el sidebar/topbar
-        var unameEl = document.querySelector('#pgAdmin .uname');
-        if (unameEl) unameEl.textContent = adminUsr.nombre || adminUsr.usuario;
-        
-        var avaEl = document.querySelector('#pgAdmin .ava');
-        if (avaEl) avaEl.textContent = (adminUsr.nombre || adminUsr.usuario).substring(0, 2).toUpperCase();
-        
-        var sbnameEl = document.querySelector('#pgAdmin .sbuname');
-        if (sbnameEl) sbnameEl.textContent = adminUsr.nombre || adminUsr.usuario;
-        
-        var sbroleEl = document.querySelector('#pgAdmin .sbrole');
-        if (sbroleEl) sbroleEl.textContent = adminUsr.rol || 'Administrador';
-
-        // Restaurar la última sección visitada o abrir Dashboard por defecto
-        var lastSec = localStorage.getItem('ises_last_sec') || 'navDash';
-        await goSection(lastSec);
-        return;
-      }
-    }
-
-    // 2. Si no hay admin, verificar si hay postulante activo guardado en sessionStorage
-    var savedCed = sessionStorage.getItem('ises_post_ced');
-    if (savedCed) {
-      show('pgPost');
-      document.getElementById('cedDisplay').textContent = savedCed;
-      document.getElementById('fDoc').value = savedCed;
-      
-      // Importar datos de postulaciones previas
-      try {
-        let { data } = await supabase
-          .from('postulaciones')
-          .select('*')
-          .eq('documento', savedCed)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (data && data.length > 0) {
-          var pre = data[0];
-          document.getElementById('fNombre').value = pre.nombre || '';
-          document.getElementById('fCiudad').value = pre.ciudad || '';
-          document.getElementById('fTel').value = pre.telefono || '';
-          document.getElementById('fEmail').value = pre.correo || '';
-          document.getElementById('fPerfil').value = pre.perfil || 'Bachiller';
-          document.getElementById('fProf').value = pre.profesion || '';
-          document.getElementById('fExp').value = pre.experiencia || '';
-          document.getElementById('fArea').value = pre.area || 'Administrativa';
-          document.getElementById('fCert').value = pre.certificado || 'No';
-          document.getElementById('fAjustes').value = pre.ajustes || '';
-        }
-      } catch (e) {
-        console.warn('Error al restaurar perfil del postulante:', e);
-      }
-      
-      goToPostStep(1);
-    }
-  } catch (err) {
-    console.error('Error al restaurar sesión activa:', err);
-  }
 
   // === EVENTOS LOGIN ===
   document.getElementById('loginType').addEventListener('change', onTypeChange);
@@ -229,6 +156,85 @@ async function initApp() {
   var toggleAdminBtn = document.getElementById('btnToggleAdmin');
   if (toggleAdminBtn) {
     toggleAdminBtn.addEventListener('click', toggleSidebar);
+  }
+
+  // Render inicial de convocatorias en el formulario del postulante
+  await renderVacantesPost();
+
+  // === RESTAURACIÓN DE SESIÓN (PERSISTENCIA AL RECARGAR) ===
+  try {
+    // 1. Verificar si hay sesión de Administrador activa en Supabase Auth
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      // Obtener el perfil del usuario activo
+      let { data: profileData, error: profileErr } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', session.user.id)
+        .eq('estado', 'Activo')
+        .limit(1);
+
+      if (!profileErr && profileData && profileData.length > 0) {
+        var adminUsr = profileData[0];
+        show('pgAdmin');
+        
+        // Cargar datos del administrador en el sidebar/topbar
+        var unameEl = document.querySelector('#pgAdmin .uname');
+        if (unameEl) unameEl.textContent = adminUsr.nombre || adminUsr.usuario;
+        
+        var avaEl = document.querySelector('#pgAdmin .ava');
+        if (avaEl) avaEl.textContent = (adminUsr.nombre || adminUsr.usuario).substring(0, 2).toUpperCase();
+        
+        var sbnameEl = document.querySelector('#pgAdmin .sbuname');
+        if (sbnameEl) sbnameEl.textContent = adminUsr.nombre || adminUsr.usuario;
+        
+        var sbroleEl = document.querySelector('#pgAdmin .sbrole');
+        if (sbroleEl) sbroleEl.textContent = adminUsr.rol || 'Administrador';
+
+        // Restaurar la última sección visitada o abrir Dashboard por defecto
+        var lastSec = localStorage.getItem('ises_last_sec') || 'navDash';
+        await goSection(lastSec);
+        return;
+      }
+    }
+
+    // 2. Si no hay admin, verificar si hay postulante activo guardado en sessionStorage
+    var savedCed = sessionStorage.getItem('ises_post_ced');
+    if (savedCed) {
+      show('pgPost');
+      document.getElementById('cedDisplay').textContent = savedCed;
+      document.getElementById('fDoc').value = savedCed;
+      
+      // Importar datos de postulaciones previas
+      try {
+        let { data } = await supabase
+          .from('postulaciones')
+          .select('*')
+          .eq('documento', savedCed)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (data && data.length > 0) {
+          var pre = data[0];
+          document.getElementById('fNombre').value = pre.nombre || '';
+          document.getElementById('fCiudad').value = pre.ciudad || '';
+          document.getElementById('fTel').value = pre.telefono || '';
+          document.getElementById('fEmail').value = pre.correo || '';
+          document.getElementById('fPerfil').value = pre.perfil || 'Bachiller';
+          document.getElementById('fProf').value = pre.profesion || '';
+          document.getElementById('fExp').value = pre.experiencia || '';
+          document.getElementById('fArea').value = pre.area || 'Administrativa';
+          document.getElementById('fCert').value = pre.certificado || 'No';
+          document.getElementById('fAjustes').value = pre.ajustes || '';
+        }
+      } catch (e) {
+        console.warn('Error al restaurar perfil del postulante:', e);
+      }
+      
+      goToPostStep(1);
+    }
+  } catch (err) {
+    console.error('Error al restaurar sesión activa:', err);
   }
 }
 
