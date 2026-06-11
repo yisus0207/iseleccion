@@ -45,6 +45,14 @@ async function initApp() {
   document.getElementById('btnEnviar').addEventListener('click', enviarPostulacion);
   document.getElementById('btnLimpiar').addEventListener('click', limpiarForm);
 
+  // === EVENTOS POSTULANTE WIZARD ===
+  document.getElementById('btnNextStep_1').addEventListener('click', function() { handlePostStepNext(1); });
+  document.getElementById('btnPrevStep_2').addEventListener('click', function() { goToPostStep(1); });
+  document.getElementById('btnNextStep_2').addEventListener('click', function() { handlePostStepNext(2); });
+  document.getElementById('btnPrevStep_3').addEventListener('click', function() { goToPostStep(2); });
+  document.getElementById('btnNextStep_3').addEventListener('click', function() { handlePostStepNext(3); });
+  document.getElementById('btnPrevStep_4').addEventListener('click', function() { goToPostStep(3); });
+
   // === EVENTOS ADMIN - CONVOCATORIAS ===
   document.getElementById('btnNuevaConv').addEventListener('click', abrirModal);
   document.getElementById('btnCloseModal').addEventListener('click', cerrarModal);
@@ -200,6 +208,71 @@ async function getUsuarios() {
 
 // ===== VACANTES EN POSTULACIONES =====
 var vacSeleccionada = null;
+var currentPostStep = 1;
+
+function goToPostStep(step) {
+  if (step < 1 || step > 4) return;
+  currentPostStep = step;
+  
+  // Mostrar/ocultar los bloques de pasos
+  for (var i = 1; i <= 4; i++) {
+    var el = document.getElementById('stepContent_' + i);
+    if (el) {
+      if (i === step) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+  }
+  
+  // Actualizar el indicador de pasos (.step-circle y .step-line)
+  document.querySelectorAll('#postStepIndicator [data-poststep]').forEach(function(circle) {
+    var s = circle.getAttribute('data-poststep');
+    circle.classList.toggle('active', s === String(step));
+    circle.classList.toggle('done', parseInt(s) < step);
+  });
+  
+  document.querySelectorAll('#postStepIndicator [data-postline]').forEach(function(line) {
+    var l = line.getAttribute('data-postline');
+    line.classList.toggle('done', parseInt(l) < step);
+  });
+  
+  // Scroll suave al inicio del formulario
+  var container = document.querySelector('#pgPost .fcnt');
+  if (container) {
+    container.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function handlePostStepNext(fromStep) {
+  if (fromStep === 1) {
+    if (!vacSeleccionada) {
+      document.getElementById('vacWarn').classList.remove('hidden');
+      document.getElementById('stepContent_1').querySelector('.vac-panel').scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    document.getElementById('vacWarn').classList.add('hidden');
+    goToPostStep(2);
+  } else if (fromStep === 2) {
+    var nom = document.getElementById('fNombre').value.trim();
+    var doc = document.getElementById('fDoc').value.trim();
+    var email = document.getElementById('fEmail').value.trim();
+    
+    if (!nom || !doc || !email) {
+      showToast('Completa los campos obligatorios (*): nombre, documento y correo electrónico.', 'warning');
+      return;
+    }
+    // Validar correo
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Ingresa un correo electrónico válido.', 'warning');
+      return;
+    }
+    goToPostStep(3);
+  } else if (fromStep === 3) {
+    goToPostStep(4);
+  }
+}
 
 async function renderVacantesPost() {
   var allConvs = await getConvs();
@@ -297,6 +370,7 @@ async function doLogin() {
     limpiarLogin();
     document.getElementById('cedDisplay').textContent = ced;
     document.getElementById('fDoc').value = ced;
+    goToPostStep(1);
     
     // Cargar datos del candidato si ya se postuló antes
     try {
@@ -899,6 +973,8 @@ function limpiarForm() {
   
   var sop = document.getElementById('fSop');
   if (sop) sop.value = '';
+
+  goToPostStep(1);
 }
 
 async function cambiarEstadoCand(id, nuevoEstado, obs) {

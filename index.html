@@ -104,56 +104,105 @@
         <div><h4>¡Inscripción enviada exitosamente!</h4><p>Tu postulación ha sido registrada. Recibirás información al correo indicado.</p></div>
       </div>
 
-      <!-- VACANTES ACTIVAS -->
-      <div class="vac-panel">
-        <div class="vac-head">
-          <h3>📢 Vacantes disponibles — Selecciona a cuál deseas aplicar</h3>
-          <span id="vacContador">Cargando...</span>
-        </div>
-        <div id="vacGrid" class="vac-grid"></div>
-        <div id="vacWarn" class="vac-warn hidden">⚠️ Debes seleccionar una vacante antes de enviar tu postulación.</div>
+      <!-- INDICADOR DE PASOS -->
+      <div class="step-indicator" id="postStepIndicator">
+        <div class="step-circle active" data-poststep="1">1<span class="step-label">Vacante</span></div>
+        <div class="step-line" data-postline="1"></div>
+        <div class="step-circle" data-poststep="2">2<span class="step-label">Personal</span></div>
+        <div class="step-line" data-postline="2"></div>
+        <div class="step-circle" data-poststep="3">3<span class="step-label">Profesión</span></div>
+        <div class="step-line" data-postline="3"></div>
+        <div class="step-circle" data-poststep="4">4<span class="step-label">Enviar</span></div>
       </div>
 
-      <h2>Formulario de Inscripción</h2>
-      <p>Complete su información y adjunte hoja de vida en PDF.</p>
-      <div class="fgrid">
-        <div class="fcard">
-          <h3>👤 Información personal</h3>
-          <label>Nombres y apellidos *</label><input id="fNombre" placeholder="Ej: Ana María González"/>
-          <label>Tipo y número de documento *</label><input id="fDoc" placeholder="Cédula / Pasaporte"/>
-          <label>Ciudad de residencia</label><input id="fCiudad" placeholder="Ej: Barranquilla"/>
-          <label>Teléfono</label><input id="fTel" placeholder="Ej: 300 123 4567"/>
-          <label>Correo electrónico *</label><input id="fEmail" type="email" placeholder="correo@ejemplo.com"/>
+      <!-- PASO 1: SELECCIÓN DE VACANTE -->
+      <div class="step-content" id="stepContent_1">
+        <div class="vac-panel">
+          <div class="vac-head">
+            <h3>📢 Vacantes disponibles — Selecciona a cuál deseas aplicar</h3>
+            <span id="vacContador">Cargando...</span>
+          </div>
+          <div id="vacGrid" class="vac-grid"></div>
+          <div id="vacWarn" class="vac-warn hidden">⚠️ Debes seleccionar una vacante antes de avanzar al siguiente paso.</div>
         </div>
-        <div class="fcard">
-          <h3>💼 Información profesional</h3>
-          <label>Nivel de formación</label>
-          <select id="fPerfil"><option>Bachiller</option><option>Técnico</option><option>Tecnólogo</option><option>Profesional</option><option>Universitario</option></select>
-          <label>Profesión o carrera</label><input id="fProf" placeholder="Ej: Administración de Empresas"/>
-          <label>Experiencia laboral</label><textarea id="fExp" placeholder="Describa su experiencia..."></textarea>
-          <label>Área de interés</label>
-          <select id="fArea"><option>Administrativa</option><option>Sistemas</option><option>Desarrollo de software</option><option>Contabilidad</option><option>Talento Humano</option></select>
-          <input type="hidden" id="fConvId" value=""/>
-          <input type="hidden" id="fConvNombre" value=""/>
-        </div>
-        <div class="fcard">
-          <h3>♿ Inclusión laboral</h3>
-          <label>¿Certificado de discapacidad vigente?</label>
-          <select id="fCert"><option>No</option><option>Sí</option></select>
-          <label>Ajustes razonables requeridos</label>
-          <textarea id="fAjustes" placeholder="Indique ajustes especiales si los requiere..."></textarea>
-        </div>
-        <div class="fcard">
-          <h3>📎 Documentos</h3>
-          <label>Hoja de vida en PDF *</label><input id="fPDF" type="file" accept="application/pdf"/>
-          <label style="margin-top:14px">Soportes adicionales</label><input id="fSop" type="file" multiple/>
-          <p style="font-size:11px;color:#5a7068;margin-top:12px;line-height:1.5">📌 Tus hojas de vida se almacenarán de forma segura en Supabase Storage.</p>
+        <div class="step-footer" style="justify-content: flex-end;">
+          <button class="sbtn" id="btnNextStep_1" style="display: flex; align-items: center; gap: 8px;">Continuar →</button>
         </div>
       </div>
-      <div class="facts">
-        <label><input id="fDatos" type="checkbox" style="width:16px;height:16px;accent-color:var(--azul)"/> Autorizo el tratamiento de mis datos personales para el proceso de selección.</label>
-        <button class="sbtn" id="btnEnviar">Enviar inscripción ✓</button>
-        <button class="cbtn" id="btnLimpiar">Limpiar</button>
+
+      <!-- PASO 2: INFORMACIÓN PERSONAL -->
+      <div class="step-content hidden" id="stepContent_2">
+        <h2>Formulario de Inscripción - Paso 2 de 4</h2>
+        <p style="margin-bottom: 20px;">Complete su información de contacto y datos personales básicos.</p>
+        <div class="fgrid" style="grid-template-columns: 1fr; max-width: 600px; margin: 0 auto;">
+          <div class="fcard">
+            <h3>👤 Información personal</h3>
+            <label>Nombres y apellidos *</label><input id="fNombre" placeholder="Ej: Ana María González"/>
+            <label>Tipo y número de documento *</label><input id="fDoc" placeholder="Cédula / Pasaporte"/>
+            <label>Ciudad de residencia</label><input id="fCiudad" placeholder="Ej: Barranquilla"/>
+            <label>Teléfono</label><input id="fTel" placeholder="Ej: 300 123 4567"/>
+            <label>Correo electrónico *</label><input id="fEmail" type="email" placeholder="correo@ejemplo.com"/>
+          </div>
+        </div>
+        <div class="step-footer" style="max-width: 600px; margin: 24px auto 0;">
+          <button class="cbtn" id="btnPrevStep_2">← Volver</button>
+          <button class="sbtn" id="btnNextStep_2">Continuar →</button>
+        </div>
+      </div>
+
+      <!-- PASO 3: INFORMACIÓN PROFESIONAL E INCLUSIÓN -->
+      <div class="step-content hidden" id="stepContent_3">
+        <h2>Formulario de Inscripción - Paso 3 de 4</h2>
+        <p style="margin-bottom: 20px;">Detalle su nivel educativo, experiencia laboral y necesidades de inclusión.</p>
+        <div class="fgrid">
+          <div class="fcard">
+            <h3>💼 Información profesional</h3>
+            <label>Nivel de formación</label>
+            <select id="fPerfil"><option>Bachiller</option><option>Técnico</option><option>Tecnólogo</option><option>Profesional</option><option>Universitario</option></select>
+            <label>Profesión o carrera</label><input id="fProf" placeholder="Ej: Administración de Empresas"/>
+            <label>Experiencia laboral</label><textarea id="fExp" placeholder="Describa su experiencia laboral..."></textarea>
+            <label>Área de interés</label>
+            <select id="fArea"><option>Administrativa</option><option>Sistemas</option><option>Desarrollo de software</option><option>Contabilidad</option><option>Talento Humano</option></select>
+            <input type="hidden" id="fConvId" value=""/>
+            <input type="hidden" id="fConvNombre" value=""/>
+          </div>
+          <div class="fcard">
+            <h3>♿ Inclusión laboral</h3>
+            <label>¿Certificado de discapacidad vigente?</label>
+            <select id="fCert"><option>No</option><option>Sí</option></select>
+            <label>Ajustes razonables requeridos</label>
+            <textarea id="fAjustes" placeholder="Indique ajustes especiales si los requiere..."></textarea>
+          </div>
+        </div>
+        <div class="step-footer">
+          <button class="cbtn" id="btnPrevStep_3">← Volver</button>
+          <button class="sbtn" id="btnNextStep_3">Continuar →</button>
+        </div>
+      </div>
+
+      <!-- PASO 4: ADJUNTAR ARCHIVOS Y ENVIAR -->
+      <div class="step-content hidden" id="stepContent_4">
+        <h2>Formulario de Inscripción - Paso 4 de 4</h2>
+        <p style="margin-bottom: 20px;">Suba su hoja de vida y autorice el tratamiento de datos para finalizar la postulación.</p>
+        <div class="fgrid" style="grid-template-columns: 1fr; max-width: 600px; margin: 0 auto;">
+          <div class="fcard">
+            <h3>📎 Documentos</h3>
+            <label>Hoja de vida en PDF *</label><input id="fPDF" type="file" accept="application/pdf"/>
+            <label style="margin-top:14px">Soportes adicionales</label><input id="fSop" type="file" multiple/>
+            <p style="font-size:11px;color:#5a7068;margin-top:12px;line-height:1.5">📌 Tus hojas de vida se almacenarán de forma segura en Supabase Storage.</p>
+          </div>
+        </div>
+        <div class="step-footer" style="flex-direction: column; align-items: stretch; max-width: 600px; margin: 24px auto 0; gap: 16px;">
+          <div style="display: flex; align-items: flex-start; gap: 8px;">
+            <input id="fDatos" type="checkbox" style="width:18px; height:18px; margin-top:2px; accent-color:var(--azul); flex-shrink:0; cursor:pointer;"/>
+            <label for="fDatos" style="font-size:13px; cursor:pointer; color:#1a3a60; line-height:1.4;">Autorizo el tratamiento de mis datos personales para el proceso de selección.</label>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; width: 100%;">
+            <button class="cbtn" id="btnPrevStep_4" style="flex: 1;">← Volver</button>
+            <button class="sbtn" id="btnEnviar" style="flex: 1.5; background: var(--grad);">Inscribirme ✓</button>
+            <button class="cbtn" id="btnLimpiar" style="flex: 1;">Limpiar</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
