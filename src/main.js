@@ -29,6 +29,82 @@ async function initApp() {
   // Render inicial de convocatorias en el formulario del postulante
   await renderVacantesPost();
 
+  // === RESTAURACIÓN DE SESIÓN (PERSISTENCIA AL RECARGAR) ===
+  try {
+    // 1. Verificar si hay sesión de Administrador activa en Supabase Auth
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      // Obtener el perfil del usuario activo
+      let { data: profileData, error: profileErr } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', session.user.id)
+        .eq('estado', 'Activo')
+        .limit(1);
+
+      if (!profileErr && profileData && profileData.length > 0) {
+        var adminUsr = profileData[0];
+        show('pgAdmin');
+        
+        // Cargar datos del administrador en el sidebar/topbar
+        var unameEl = document.querySelector('#pgAdmin .uname');
+        if (unameEl) unameEl.textContent = adminUsr.nombre || adminUsr.usuario;
+        
+        var avaEl = document.querySelector('#pgAdmin .ava');
+        if (avaEl) avaEl.textContent = (adminUsr.nombre || adminUsr.usuario).substring(0, 2).toUpperCase();
+        
+        var sbnameEl = document.querySelector('#pgAdmin .sbuname');
+        if (sbnameEl) sbnameEl.textContent = adminUsr.nombre || adminUsr.usuario;
+        
+        var sbroleEl = document.querySelector('#pgAdmin .sbrole');
+        if (sbroleEl) sbroleEl.textContent = adminUsr.rol || 'Administrador';
+
+        // Restaurar la última sección visitada o abrir Dashboard por defecto
+        var lastSec = localStorage.getItem('ises_last_sec') || 'navDash';
+        await goSection(lastSec);
+        return;
+      }
+    }
+
+    // 2. Si no hay admin, verificar si hay postulante activo guardado en sessionStorage
+    var savedCed = sessionStorage.getItem('ises_post_ced');
+    if (savedCed) {
+      show('pgPost');
+      document.getElementById('cedDisplay').textContent = savedCed;
+      document.getElementById('fDoc').value = savedCed;
+      
+      // Importar datos de postulaciones previas
+      try {
+        let { data } = await supabase
+          .from('postulaciones')
+          .select('*')
+          .eq('documento', savedCed)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (data && data.length > 0) {
+          var pre = data[0];
+          document.getElementById('fNombre').value = pre.nombre || '';
+          document.getElementById('fCiudad').value = pre.ciudad || '';
+          document.getElementById('fTel').value = pre.telefono || '';
+          document.getElementById('fEmail').value = pre.correo || '';
+          document.getElementById('fPerfil').value = pre.perfil || 'Bachiller';
+          document.getElementById('fProf').value = pre.profesion || '';
+          document.getElementById('fExp').value = pre.experiencia || '';
+          document.getElementById('fArea').value = pre.area || 'Administrativa';
+          document.getElementById('fCert').value = pre.certificado || 'No';
+          document.getElementById('fAjustes').value = pre.ajustes || '';
+        }
+      } catch (e) {
+        console.warn('Error al restaurar perfil del postulante:', e);
+      }
+      
+      goToPostStep(1);
+    }
+  } catch (err) {
+    console.error('Error al restaurar sesión activa:', err);
+  }
+
   // === EVENTOS LOGIN ===
   document.getElementById('loginType').addEventListener('change', onTypeChange);
   document.getElementById('btnLogin').addEventListener('click', doLogin);
@@ -96,6 +172,7 @@ async function initApp() {
   // Logout Admin
   document.getElementById('btnLogoutAdmin').addEventListener('click', async function() {
     if (await showConfirm('¿Deseas cerrar la sesión de administrador?', 'Cerrar sesión', 'question')) {
+      localStorage.removeItem('ises_last_sec');
       await supabase.auth.signOut();
       show('pgLogin');
       goSection('navDash');
@@ -366,6 +443,7 @@ async function doLogin() {
   if (t === 'post') {
     var ced = document.getElementById('cedula').value.trim();
     if (!ced) { showToast('Ingrese su número de cédula.', 'warning'); return; }
+    sessionStorage.setItem('ises_post_ced', ced);
     show('pgPost');
     limpiarLogin();
     document.getElementById('cedDisplay').textContent = ced;
@@ -468,6 +546,7 @@ async function doLogin() {
 }
 
 function cerrarSesion() {
+  sessionStorage.removeItem('ises_post_ced');
   show('pgLogin');
   limpiarLogin();
 }
@@ -499,6 +578,9 @@ async function goSection(navId) {
   
   document.getElementById('topTitle').textContent = navTitlesMap[secId] || '';
   
+  // Guardar la pestaña activa en localStorage
+  localStorage.setItem('ises_last_sec', navId);
+
   // Renderizar la sección específica de forma asíncrona
   if (secId === 'secConv') await renderConvFull();
   if (secId === 'secPost') await renderCandidatos();
