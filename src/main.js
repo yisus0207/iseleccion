@@ -588,6 +588,10 @@ async function goSection(navId) {
   localStorage.setItem('ises_last_sec', navId);
 
   // Renderizar la sección específica de forma asíncrona
+  if (secId === 'secDash') {
+    await renderCandidatos();
+    await renderConvocatorias();
+  }
   if (secId === 'secConv') await renderConvFull();
   if (secId === 'secPost') await renderCandidatos();
   if (secId === 'secEval') await renderEval();
